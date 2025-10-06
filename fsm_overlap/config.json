@@ -1,0 +1,14 @@
+{
+	"general": {
+        "prompt": "./fsm_overlap.sv",
+        "name": "fsm_overlap",
+        "testbench": "./fsm_overlap_tb.v",
+		"model_family": "ChatGPT",
+		"model_id": "gpt-4o-mini",
+		"num_candidates": 5,
+		"iterations": 5,
+        "outdir": "outputs_fsm_overlap",
+        "log": "log.txt",
+		"ensemble": false
+    }
+}
