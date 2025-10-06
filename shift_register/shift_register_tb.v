@@ -22,7 +22,7 @@ typedef struct packed {
     int errors;
     int errortime;
     int errors_p1y;
-    int errortime_p1;
+    int errortime_p1y;
     int errors_p2y;
     int errortime_p2y;
 
@@ -30,11 +30,6 @@ typedef struct packed {
 } stats;
 
 stats stats1;
-
-// Clock generation
-always begin
-    #5 clk = ~clk;
-end
 
 // Test case data
 reg [7:0] test_case_reset_n = 8'b00111111;
@@ -59,7 +54,7 @@ initial begin
         @(posedge clk);
 
         if (data_out !== test_case_data_out[8*i+:8]) begin
-            stats1.errors++
+            stats1.errors++;
             // $display("Error: Test case %0d failed. Expected: %b, Got: %b", i, test_case_data_out[8*i+:8], data_out);
             // $finish;
         end
@@ -71,6 +66,7 @@ initial begin
     $display("Hint: Total mismatched samples is %1d out of %1d samples\n", stats1.errors, stats1.clocks);
     $display("Mismatches: %1d in %1d samples", stats1.errors, stats1.clocks);
     $finish;
+end
 
     reg vcd_clk;
 
@@ -78,5 +74,7 @@ initial begin
         $dumpfile("my_design.vcd");
         $dumpvars(0, tb);
     end
-end
+
+    always #5 vcd_clk = ~vcd_clk; // Toggle clock every 5 time unit
 endmodule
+
