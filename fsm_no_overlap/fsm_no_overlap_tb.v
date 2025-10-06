@@ -1,19 +1,17 @@
 `timescale 1ns / 1ps
 
-// AutoChip-friendly testbench for a NON-overlapping sequence detector.
-// DUT interface assumed:
-//   module fsm_no_overlap(input clk, input reset, input X, output Z);
-// Pattern under test (MSB-first): 00011000
+// AutoChip-friendly testbench for NON-OVERLAPPING detector of pattern 00011000 (MSB-first).
+// NOT THE ORIGINAL TB USED IN LAB 1
 
 module tb;
 
   // DUT I/O
   reg  clk;
-  reg  reset;   // active-high reset
+  reg  reset;   // active-high, synchronous
   reg  X;       // serial input
   wire Z;       // detector output
 
-  // Instantiate DUT (edit port names if different)
+  // Instantiate DUT (edit if your port names differ)
   fsm_no_overlap uut (
     .clk  (clk),
     .reset(reset),
@@ -23,9 +21,8 @@ module tb;
 
   // Clock
   initial clk = 0;
-  always #5 clk = ~clk;
+  always #5 clk = ~clk; // 10 ns period
 
-  // Stats struct (SV; works with -g2012)
   typedef struct packed {
       int errors;
       int clocks;
@@ -33,79 +30,50 @@ module tb;
 
   stats_t stats1;
 
-  // Reference model (NON-overlap)
-  parameter integer PLEN = 8;
-  parameter [PLEN-1:0] PATTERN = 8'b00011000;
+  // Streams and expected Z masks for NON-OVERLAP behavior
+  //   8'b00011000                       -> 8'b00000001
+  //  16'b0001100000011000               -> 16'b0000000100000001
+  //  13'b0001100011000                  -> 13'b0000000100000      (overlap suppressed => 1 pulse)
+  //  18'b000110001100011000             -> 18'b000000010000000001 (overlap suppressed => 2 pulses)
 
-  integer idx;  // matched prefix length [0..PLEN]
-  reg refZ;
-
-  // Return k-th bit of PATTERN in MSB-first order: k=0 -> MSB
-  function pat_bit;
-    input integer k;
-    begin
-      pat_bit = PATTERN[PLEN-1-k];
-    end
-  endfunction
-
-  task update_ref;
-    input b;
+  task run_test;
+    input [63:0]  stream;
+    input integer length;
+    input [63:0]  expected;
+    input [127:0] name;
+    integer j;
   begin
-    refZ = 1'b0;
-    if (b == pat_bit(idx)) begin
-      idx = idx + 1;
-      if (idx == PLEN) begin
-        refZ = 1'b1;  // pulse on full match
-        idx = 0;      // NON-overlap: restart from scratch after a hit
-      end
-    end else begin
-      // mismatch: NON-overlap resets fully; allow restart only from first bit
-      if (b == pat_bit(0)) idx = 1;
-      else idx = 0;
-    end
-  end
-  endtask
+    for (j = length-1; j >= 0; j = j - 1) begin
+      X = stream[j];
+      #10; // one clock per bit
 
-  // Drive a packed vector MSB-first for 'len' bits
-  task run_sequence;
-    input [255:0] seq;
-    input integer len;
-    integer i;
-  begin
-    for (i = len-1; i >= 0; i = i - 1) begin
-      X <= seq[i];
-
-      @(posedge clk);
-      update_ref(seq[i]);
-
-      @(negedge clk);
+      // Count a sample and compare
       stats1.clocks++;
-      if (Z !== refZ) stats1.errors++;
+      if (Z !== expected[j]) begin
+        stats1.errors++;
+      end
     end
   end
   endtask
 
   // Test runner
   initial begin
-    // init
-    reset  = 1'b1;
-    X      = 1'b0;
-    idx    = 0;
-    refZ   = 1'b0;
+    // init & reset
+    reset = 1;
+    X     = 0;
     stats1.errors = 0;
     stats1.clocks = 0;
 
-    repeat (2) @(posedge clk);
-    reset = 1'b0;  // deassert reset
-    @(posedge clk);
+    #20;        // hold reset a couple cycles
+    reset = 0;  // deassert
+    #10;
 
-    // Sequences where overlap would create back-to-back hits (should be suppressed)
-    run_sequence(32'b00000000_00011000, 32);                          // single hit
-    run_sequence(32'b00011000_00011000, 32);                          // back-to-back (no overlap allowed)
-    run_sequence(40'b000000_0001100011000, 40);                       // would overlap
-    run_sequence(64'b00011000_00000000_00011000_00011000, 64);        // multiple hits
+    // ---- EXACT SAME TESTS ----
+    run_test(  8'b00011000,                    8,  8'b00000001,                  "8b_one_hit");
+    run_test( 16'b0001100000011000,           16, 16'b0000000100000001,         "16b_two_hits_separated");
+    run_test( 13'b0001100011000,              13, 13'b0000000100000,            "13b_overlap_suppressed");
+    run_test( 18'b000110001100011000,         18, 18'b000000010000000001,       "18b_two_hits_nonoverlap");
 
-    // Final summary (AutoChip-friendly)
     $display("Hint: Total mismatched samples is %0d out of %0d samples\n",
              stats1.errors, stats1.clocks);
     $display("Mismatches: %0d in %0d samples",
@@ -121,4 +89,3 @@ module tb;
   end
 
 endmodule
-
